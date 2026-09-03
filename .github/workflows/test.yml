@@ -1,15 +1,21 @@
 name: Test
 on:
-  push:
-    branches:
-      - main
-  pull_request:
+  workflow_dispatch:
+    inputs:
+      test-filter:
+        description: >-
+          Filename regex handed to uvu as its pattern argument, so only the
+          matching test files run. Leave empty to run the full suite.
+        required: false
+        default: ''
+        type: string
 permissions:
   contents: read
 jobs:
   full:
     name: Node.js Latest Full
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout the repository
         uses: actions/checkout@v4
@@ -22,12 +28,36 @@ jobs:
         with:
           node-version: 23
           cache: pnpm
+      - name: Pin the npm registry to the release date
+        run: |
+          npm config set registry https://time-machines-npm.sealsecurity.io/
+          npm config set //time-machines-npm.sealsecurity.io/:_authToken=2025-01-08T11:44:31.586000Z
       - name: Install dependencies
         run: pnpm install --ignore-scripts
       - name: Run tests
-        run: pnpm test
+        env:
+          BROWSERSLIST_IGNORE_OLD_DATA: '1'
+        run: |
+          if [ -n "${{ inputs.test-filter }}" ]; then
+            NODE_ENV=test ./node_modules/.bin/uvu test "${{ inputs.test-filter }}"
+          else
+            pnpm test
+          fi
+      - name: Build the release tarball
+        run: |
+          npx clean-publish --without-publish --temp-dir "$RUNNER_TEMP/clean-package"
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          cd "$RUNNER_TEMP/clean-package"
+          npm pack --pack-destination "$GITHUB_WORKSPACE/dist"
+      - name: Upload the release tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-tarball
+          path: dist/browserslist-4.24.4.tgz
+          if-no-files-found: error
   short:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       matrix:
         node-version:
@@ -47,20 +77,31 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: pnpm
+      - name: Pin the npm registry to the release date
+        run: |
+          npm config set registry https://time-machines-npm.sealsecurity.io/
+          npm config set //time-machines-npm.sealsecurity.io/:_authToken=2025-01-08T11:44:31.586000Z
       - name: Install dependencies
         run: pnpm install --ignore-scripts
       - name: Run unit tests
-        run: pnpm unit
+        env:
+          BROWSERSLIST_IGNORE_OLD_DATA: '1'
+        run: |
+          if [ -n "${{ inputs.test-filter }}" ]; then
+            NODE_ENV=test ./node_modules/.bin/uvu test "${{ inputs.test-filter }}"
+          else
+            pnpm unit
+          fi
   old:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
+      # Node 12 and older cannot execute the suite at all: uvu 0.5.6 needs
+      # `globalThis` (Node 12+) and the tests need `fs.rm` (Node 14.14+).
       matrix:
         node-version:
           - 16
           - 14
-          - 12
-          - 10
-          - 8
     name: Node.js ${{ matrix.node-version }} Quick
     steps:
       - name: Checkout the repository
@@ -75,7 +116,18 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
+      - name: Pin the npm registry to the release date
+        run: |
+          npm config set registry https://time-machines-npm.sealsecurity.io/
+          npm config set //time-machines-npm.sealsecurity.io/:_authToken=2025-01-08T11:44:31.586000Z
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile --ignore-scripts
       - name: Run unit tests
-        run: pnpm unit
+        env:
+          BROWSERSLIST_IGNORE_OLD_DATA: '1'
+        run: |
+          if [ -n "${{ inputs.test-filter }}" ]; then
+            NODE_ENV=test ./node_modules/.bin/uvu test "${{ inputs.test-filter }}"
+          else
+            pnpm run unit
+          fi

@@ -195,12 +195,13 @@ function normalizeStats(data, stats) {
 
   if (typeof stats !== 'object') return undefined
 
-  var normalized = {}
+  var normalized = Object.create(null)
   for (var i in stats) {
     var versions = Object.keys(stats[i])
-    if (versions.length === 1 && data[i] && data[i].versions.length === 1) {
-      var normal = data[i].versions[0]
-      normalized[i] = {}
+    var known = Object.prototype.hasOwnProperty.call(data, i) && data[i]
+    if (versions.length === 1 && known && known.versions.length === 1) {
+      var normal = known.versions[0]
+      normalized[i] = Object.create(null)
       normalized[i][normal] = stats[i][versions[0]]
     } else {
       normalized[i] = stats[i]

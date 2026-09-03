@@ -394,7 +394,16 @@ function checkQueries(queries) {
   }
 }
 
-var cache = {}
+var CACHE_MAX_ENTRIES = 500
+
+function boundedCacheSet(map, key, value) {
+  if (map.size >= CACHE_MAX_ENTRIES) {
+    map.delete(map.keys().next().value)
+  }
+  map.set(key, value)
+}
+
+var cache = new Map()
 
 function browserslist(queries, opts) {
   opts = prepareOpts(opts)
@@ -419,7 +428,7 @@ function browserslist(queries, opts) {
   }
 
   var cacheKey = JSON.stringify([queries, context])
-  if (cache[cacheKey]) return cache[cacheKey]
+  if (cache.has(cacheKey)) return cache.get(cacheKey)
 
   var result = uniq(resolve(queries, context)).sort(function (name1, name2) {
     name1 = name1.split(' ')
@@ -436,7 +445,7 @@ function browserslist(queries, opts) {
     }
   })
   if (!env.env.BROWSERSLIST_DISABLE_CACHE) {
-    cache[cacheKey] = result
+    boundedCacheSet(cache, cacheKey, result)
   }
   return result
 }

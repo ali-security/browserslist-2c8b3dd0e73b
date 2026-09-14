@@ -87,4 +87,24 @@ test('throws error on no stats', () => {
   throws(() => browserslist('> 5% in my stats'), /statistics was not provided/)
 })
 
+test('does not read or write through Object.prototype', () => {
+  // Keys inherited from Object.prototype used to be looked up in
+  // `browserslist.data`, so a browser named `constructor` reached
+  // `Object.constructor.versions` and crashed (CVE-2026-73088).
+  let known = JSON.parse('{"ie":{"11":10.4},"constructor":{"1":100}}')
+  equal(browserslist('> 10% in my stats', { stats: known }), [
+    'constructor 1',
+    'ie 11'
+  ])
+
+  // And `__proto__` was written onto a plain `{}`, which replaced the
+  // prototype of the normalized stats instead of adding an own key, so the
+  // entry silently disappeared from the result.
+  let proto = JSON.parse('{"ie":{"10":5.3,"11":10.4},"__proto__":{"11":60}}')
+  equal(browserslist('> 10% in my stats', { stats: proto }), [
+    '__proto__ 11',
+    'ie 11'
+  ])
+})
+
 test.run()

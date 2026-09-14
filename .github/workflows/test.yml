@@ -96,12 +96,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
-      # Node 12 and older cannot execute the suite at all: uvu 0.5.6 needs
-      # `globalThis` (Node 12+) and the tests need `fs.rm` (Node 14.14+).
       matrix:
         node-version:
           - 16
           - 14
+          - 12
+          - 10
+          - 8
     name: Node.js ${{ matrix.node-version }} Quick
     steps:
       - name: Checkout the repository
@@ -123,11 +124,20 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile --ignore-scripts
       - name: Run unit tests
+        if: matrix.node-version >= 12
         env:
           BROWSERSLIST_IGNORE_OLD_DATA: '1'
         run: |
           if [ -n "${{ inputs.test-filter }}" ]; then
             NODE_ENV=test ./node_modules/.bin/uvu test "${{ inputs.test-filter }}"
+          elif [ "${{ matrix.node-version }}" = "12" ]; then
+            # cache/custom/extends/shareable-stats pull in fs-extra 11, which
+            # needs Node >= 14.14. The other 30 suites run fine here.
+            NODE_ENV=test ./node_modules/.bin/uvu test '^(?!cache|custom|extends|shareable-stats).*\.test\.js$'
           else
             pnpm run unit
           fi
+      - name: Run the old-Node smoke check
+        env:
+          BROWSERSLIST_IGNORE_OLD_DATA: '1'
+        run: node .github/old-node-smoke.js
